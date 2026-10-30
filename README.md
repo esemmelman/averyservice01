@@ -2,7 +2,7 @@
 
 A responsive HTML app with a tallit, a boy symbolizing the soul, a Torah scroll, and a boy learning from a Hebrew book. Each image plays or pauses its own approved personal recording.
 
-Public site: https://esemmelman.github.io/tallit-blessing/
+Public site: https://esemmelman.github.io/averyservice01/
 
 ## Record your blessing
 
@@ -17,3 +17,4 @@ Enable GitHub Pages with GitHub Actions as its source. The workflow publishes on
 ## Checks
 
 Run `node --test recorder.test.cjs` to check separate recording, WAV preview, approval, and existing tallit preservation.
+
