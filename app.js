@@ -32,8 +32,8 @@ $('tallit').onclick = async () => {
   if (!player.paused) {player.pause(); return;}
   try {await player.play();} catch {$('status').textContent = 'Unable to play the blessing. Please try again.';}
 };
-player.onplay = () => {$('play-icon').textContent='Ⅱ'; $('play-label').textContent='PAUSE THE BLESSING'; $('tallit').setAttribute('aria-label','Pause the tallit blessing'); $('status').textContent='Listening to the blessing…';};
-function stopped(){ $('play-icon').textContent='▶'; $('play-label').textContent='LISTEN TO THE BLESSING'; $('tallit').setAttribute('aria-label','Play the tallit blessing'); $('status').textContent='Touch the tallit whenever you’re ready.'; }
+player.onplay = () => {$('tallit').setAttribute('aria-label','Pause the tallit blessing'); $('status').textContent='Listening to the blessing…';};
+function stopped(){ $('tallit').setAttribute('aria-label','Play the tallit blessing'); $('status').textContent='Touch the tallit whenever you’re ready.'; }
 player.onpause=stopped; player.onended=stopped;
 $('record').onclick = async () => {
   $('record').disabled=true;
