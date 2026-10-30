@@ -4,7 +4,7 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 
 test('Each image records, previews and publishes to its own endpoint',async()=>{
-  const elements=new Map(), studios=new Map(), posts=[], contexts=[];
+  const elements=new Map(), studios=new Map(), posts=[], contexts=[], audioPlayers=[];
   function element(){return {hidden:true,disabled:false,src:'',paused:true,append(){},setAttribute(){},scrollIntoView(){},load(){},click(){return this.onclick();},pause(){this.paused=true;},async play(){this.paused=false;},getAttribute(name){return this[name]||null;}};}
   for(const id of ['tallit','neshama','torah','learning']){
     elements.set(id,element());
@@ -18,7 +18,7 @@ test('Each image records, previews and publishes to its own endpoint',async()=>{
     createMediaStreamSource(){return {connect(){},disconnect(){}};}
     createScriptProcessor(){return this.processor={connect(){},disconnect(){}};}
   }
-  const sandbox={Audio:class {constructor(){Object.assign(this,element());}},document:{getElementById(id){return id==='recorder-template'?{content:{cloneNode(){return {};}}}:elements.get(id);},querySelector(selector){return studios.get(selector.match(/"([^"]+)"/)[1]);},querySelectorAll(){return [...studios.values()].flatMap(s=>[s.controls.get('review')]).filter(Boolean);}},location:{hostname:'127.0.0.1'},window:{AudioContext:Context},navigator:{mediaDevices:{async getUserMedia(){return {getTracks(){return [{stop(){}}];}};}}},fetch:async(url,options)=>{
+  const sandbox={Audio:class {constructor(){Object.assign(this,element());audioPlayers.push(this);}},document:{getElementById(id){return id==='recorder-template'?{content:{cloneNode(){return {};}}}:elements.get(id);},querySelector(selector){return studios.get(selector.match(/"([^"]+)"/)[1]);},querySelectorAll(){return [...studios.values()].flatMap(s=>[s.controls.get('review')]).filter(Boolean);}},location:{hostname:'127.0.0.1'},window:{AudioContext:Context},navigator:{mediaDevices:{async getUserMedia(){return {getTracks(){return [{stop(){}}];}};}}},fetch:async(url,options)=>{
     if(options?.method==='POST'){posts.push({url,body:options.body});return {ok:true,json:async()=>({audio:url+'.wav'})};}
     if(url==='/api/studio')return {ok:true};
     if(url==='blessing.json')return {ok:true,json:async()=>({audio:'blessing.wav'})};
@@ -47,4 +47,24 @@ test('Each image records, previews and publishes to its own endpoint',async()=>{
     assert.equal(wav.readUInt32LE(40),6);
   }
   assert.equal(posts.length,3);
+  for(const [index,id] of ['tallit','neshama','torah','learning'].entries()){
+    const button=elements.get(id), player=audioPlayers[index];
+    await button.onclick();
+    assert.equal(player.paused,false,`${id}: click plays`);
+    player.currentTime=5;
+    await button.onclick();
+    assert.equal(player.paused,true,`${id}: second click pauses`);
+    assert.equal(player.currentTime,5,`${id}: pause retains position`);
+    await button.onclick();
+    assert.equal(player.paused,false,`${id}: click resumes`);
+    button.onmouseleave();
+    assert.equal(player.paused,true,`${id}: mouse leave stops`);
+    assert.equal(player.currentTime,0,`${id}: mouse leave resets`);
+    await button.onclick();
+    assert.equal(player.currentTime,0,`${id}: next play starts at beginning`);
+    await button.onclick();
+    player.currentTime=8;
+    button.onmouseleave();
+    assert.equal(player.currentTime,0,`${id}: leaving while paused also resets`);
+  }
 });

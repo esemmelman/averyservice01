@@ -37,7 +37,11 @@ async function setupCard(id) {
     if(!player.paused){player.pause();return;}
     players.forEach(other=>{if(other!==player)other.pause();});
     document.querySelectorAll('audio').forEach(audio=>audio.pause());
-    try {await player.play();} catch {state('Unable to play the recording. Please refresh and try again.');studio.hidden=false;}
+    try {await player.play();} catch(error) {if(error.name==='AbortError')return;state('Unable to play the recording. Please refresh and try again.');studio.hidden=false;}
+  };
+  button.onmouseleave=()=>{
+    player.pause();
+    if(player.getAttribute('src'))player.currentTime=0;
   };
   player.onplay=()=>button.setAttribute('aria-label',`Pause ${id} recording`);
   const stopped=()=>button.setAttribute('aria-label',`Play ${id} recording`);
