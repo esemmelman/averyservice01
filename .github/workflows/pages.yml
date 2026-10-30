@@ -24,6 +24,7 @@ jobs:
           mkdir public
           cp index.html app.js public/
           cp -R assets public/
+          if [ -d recordings ]; then cp -R recordings public/; fi
           for file in blessing.json blessing.wav blessing.webm blessing.m4a blessing.ogg; do
             if [ -f "$file" ]; then cp "$file" public/; fi
           done
