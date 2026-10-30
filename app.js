@@ -1,10 +1,15 @@
 const $ = id => document.getElementById(id);
 const player = new Audio();
-let recorder, stream, chunks = [], recording, previewURL, localStudio = false;
+let stream, recording, previewURL, localStudio = false;
+let audioContext, input, processor, samples = [], capturing = false;
 let recordingStarted = 0, recordingTimer;
 function releaseMicrophone() {
   clearInterval(recordingTimer);
+  capturing = false;
+  if (processor) { processor.onaudioprocess = null; processor.disconnect(); processor = null; }
+  if (input) { input.disconnect(); input = null; }
   stream?.getTracks().forEach(track => track.stop());
+  if (audioContext && audioContext.state !== 'closed') audioContext.close();
   $('record').disabled = false;
   $('stop').disabled = true;
 }
@@ -33,40 +38,60 @@ player.onpause=stopped; player.onended=stopped;
 $('record').onclick = async () => {
   $('record').disabled=true;
   try {
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error('Please use a browser that supports microphone recording, such as Chrome or Edge.');
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!navigator.mediaDevices?.getUserMedia || !Context) throw new Error('Please open the recording studio in Chrome or Edge.');
+    // Resume inside the button gesture, before waiting for microphone permission.
+    audioContext = new Context();
+    await audioContext.resume();
     stream = await navigator.mediaDevices.getUserMedia({audio:true});
-    player.pause(); chunks=[];
-    const mimeType = ['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus','audio/webm'].find(type => MediaRecorder.isTypeSupported(type));
-    recorder = new MediaRecorder(stream, mimeType ? {mimeType} : undefined);
-    recorder.ondataavailable=e=>{if(e.data.size) chunks.push(e.data);};
-    recorder.onstop=()=>{
-      releaseMicrophone();
-      recording=new Blob(chunks,{type:recorder.mimeType || chunks[0]?.type || 'audio/webm'});
-      if(!recording.size) {
-        $('recording-state').textContent='No audio was captured. Please check your microphone and record again for a few seconds.';
-        return;
-      }
-      if(previewURL) URL.revokeObjectURL(previewURL);
-      previewURL=URL.createObjectURL(recording); $('review').src=previewURL;
-      $('review').load();
-      $('review').hidden=false; $('approval').hidden=false; $('record').disabled=false; $('stop').disabled=true;
-      $('listen').hidden=false;
-      $('recording-state').textContent='Listen back. Keep this take or record again.';
-      $('listen').scrollIntoView({behavior:'smooth',block:'center'});
+    player.pause(); $('review').pause(); samples=[];
+    input = audioContext.createMediaStreamSource(stream);
+    processor = audioContext.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = event => {
+      if (capturing) samples.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+      // Leave the output silent to prevent microphone feedback.
+      event.outputBuffer.getChannelData(0).fill(0);
     };
-    recorder.onerror=event=>{releaseMicrophone(); $('recording-state').textContent='Recording failed: '+(event.error?.message || 'Please try recording again.');};
-    recorder.start(250); recordingStarted=Date.now();
+    input.connect(processor); processor.connect(audioContext.destination);
+    capturing = true; recordingStarted=Date.now();
     recordingTimer=setInterval(()=>{$('recording-state').textContent=`● Recording — ${Math.floor((Date.now()-recordingStarted)/1000)} seconds. Press Stop when finished.`;},1000);
     $('record').disabled=true; $('stop').disabled=false; $('approval').hidden=true; $('review').hidden=true; $('listen').hidden=true;
     $('recording-state').textContent='● Recording — say the blessing, then press Stop.';
   } catch(error){releaseMicrophone(); $('recording-state').textContent=error.name==='NotAllowedError'?'Allow microphone access, then try again.':error.message;}
 };
-$('stop').onclick=()=>{
-  if(recorder?.state==='recording') {
-    clearInterval(recordingTimer); $('stop').disabled=true;
-    $('recording-state').textContent='Preparing your recording for playback…';
-    recorder.requestData(); recorder.stop();
+function encodeWav(buffers, sampleRate) {
+  const count = buffers.reduce((total, buffer) => total + buffer.length, 0);
+  const bytes = new ArrayBuffer(44 + count * 2);
+  const view = new DataView(bytes);
+  const text = (offset, value) => { for (let i=0;i<value.length;i++) view.setUint8(offset+i,value.charCodeAt(i)); };
+  text(0,'RIFF'); view.setUint32(4,36+count*2,true); text(8,'WAVE');
+  text(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true);
+  view.setUint16(22,1,true); view.setUint32(24,sampleRate,true);
+  view.setUint32(28,sampleRate*2,true); view.setUint16(32,2,true); view.setUint16(34,16,true);
+  text(36,'data'); view.setUint32(40,count*2,true);
+  let offset=44;
+  for(const buffer of buffers) for(const sample of buffer) {
+    const value=Math.max(-1,Math.min(1,sample));
+    view.setInt16(offset, value<0 ? value*32768 : value*32767,true); offset+=2;
   }
+  return new Blob([bytes],{type:'audio/wav'});
+}
+$('stop').onclick=()=>{
+  if(!capturing) return;
+  const rate=audioContext.sampleRate;
+  releaseMicrophone();
+  if(!samples.length) {
+    $('recording-state').textContent='No microphone audio arrived. Check your microphone selection and record for a few seconds.';
+    return;
+  }
+  recording=encodeWav(samples,rate); samples=[];
+  if(previewURL) URL.revokeObjectURL(previewURL);
+  previewURL=URL.createObjectURL(recording);
+  $('review').src=previewURL; $('review').load();
+  $('review').hidden=false; $('approval').hidden=false; $('listen').hidden=false;
+  $('approve').disabled=false; $('retry').disabled=false;
+  $('recording-state').textContent='Your WAV recording is ready. Press Play my recording to listen.';
+  $('listen').scrollIntoView({behavior:'smooth',block:'center'});
 };
 $('listen').onclick=async()=>{
   try {await $('review').play(); $('recording-state').textContent='Playing your recording…';}

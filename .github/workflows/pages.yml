@@ -23,7 +23,7 @@ jobs:
         run: |
           mkdir public
           cp index.html app.js public/
-          for file in blessing.json blessing.webm blessing.m4a blessing.ogg; do
+          for file in blessing.json blessing.wav blessing.webm blessing.m4a blessing.ogg; do
             if [ -f "$file" ]; then cp "$file" public/; fi
           done
       - uses: actions/upload-pages-artifact@v3
